@@ -1,9 +1,13 @@
-package main
+package worker
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"geo-worker-go/internal/config"
+	"geo-worker-go/internal/models"
+	"geo-worker-go/internal/natsclient"
+
 	"log"
 	"strconv"
 
@@ -12,8 +16,8 @@ import (
 
 func startAdvisoryLoop(
 	ctx context.Context,
-	cfg Config,
-	resources *NATSResources,
+	cfg config.Config,
+	resources *natsclient.NATSResources,
 ) error {
 	log.Println("advisory loop started")
 
@@ -37,8 +41,8 @@ func startAdvisoryLoop(
 }
 
 func handleAdvisoryMessage(
-	cfg Config,
-	resources *NATSResources,
+	cfg config.Config,
+	resources *natsclient.NATSResources,
 	rawMsg *nats.Msg,
 ) error {
 	var advisory map[string]any
@@ -64,7 +68,7 @@ func handleAdvisoryMessage(
 		advisory["stream_seqno"],
 	)
 
-	dlqRecord := DLQMessage{
+	dlqRecord := models.DLQMessage{
 		Advisory: advisory,
 		Original: nil,
 		Consumer: consumer,
@@ -79,7 +83,7 @@ func handleAdvisoryMessage(
 		}
 	}
 
-	if err := publishDLQ(resources.JS, cfg, dlqRecord); err != nil {
+	if err := natsclient.PublishDLQ(resources.JS, cfg, dlqRecord); err != nil {
 		return fmt.Errorf("publish dlq record: %w", err)
 	}
 

@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"geo-worker-go/internal/config"
+	"geo-worker-go/internal/natsclient"
+	"geo-worker-go/internal/worker"
+
 	"log"
 	"os/signal"
 	"syscall"
@@ -15,12 +19,12 @@ func main() {
 		log.Println(".env file not found")
 	}
 
-	cfg, err := LoadConfig()
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	resources, err := ConnectNATS(cfg)
+	resources, err := natsclient.ConnectNATS(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -35,7 +39,7 @@ func main() {
 
 	log.Println("NATS connection, JetStream, Object Store and pull subscription are ready")
 
-	if err := StartWorker(ctx, cfg, resources); err != nil {
+	if err := worker.StartWorker(ctx, cfg, resources); err != nil {
 		log.Fatal(err)
 	}
 }

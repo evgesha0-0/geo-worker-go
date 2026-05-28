@@ -1,19 +1,22 @@
-package main
+package worker
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"geo-worker-go/internal/config"
+	"geo-worker-go/internal/geometry"
+	"geo-worker-go/internal/natsclient"
 	"log"
 	"time"
 
 	"github.com/nats-io/nats.go"
 )
 
-func handleRequestMessage(
+func HandleRequestMessage(
 	ctx context.Context,
-	cfg Config,
-	resources *NATSResources,
+	cfg config.Config,
+	resources *natsclient.NATSResources,
 	msg *nats.Msg,
 ) error {
 	log.Printf("received request message: subject=%s size=%d bytes", msg.Subject, len(msg.Data))
@@ -34,22 +37,22 @@ func handleRequestMessage(
 		return fmt.Errorf("decode request json: %w", err)
 	}
 
-	geometry, zLevels, zPatch, taskUUID, areaID, layerID, err := readGeoJSONRequest(body)
+	geometryData, zLevels, zPatch, taskUUID, areaID, layerID, err := geometry.ReadGeoJSONRequest(body)
 	if err != nil {
 		return fmt.Errorf("read geojson request: %w", err)
 	}
 
-	patchTiles, err := getBelongingTiles(geometry, zPatch)
+	patchTiles, err := geometry.GetBelongingTiles(geometryData, zPatch)
 	if err != nil {
 		return fmt.Errorf("get patch tiles for z_patch=%d: %w", zPatch, err)
 	}
 
-	patches, err := getPatches(geometry, patchTiles, 0)
+	patches, err := geometry.GetPatches(geometryData, patchTiles, 0)
 	if err != nil {
 		return fmt.Errorf("get patches: %w", err)
 	}
 
-	patchMeta := make([]PatchMeta, 0, len(patches))
+	patchMeta := make([]geometry.PatchMeta, 0, len(patches))
 
 	for patchName, patchGeometry := range patches {
 		select {
@@ -58,15 +61,15 @@ func handleRequestMessage(
 		default:
 		}
 
-		tilesByZoom, totalTiles := computeTilesByZoom(
+		tilesByZoom, totalTiles := geometry.ComputeTilesByZoom(
 			patchGeometry,
 			zLevels,
 			patchName,
 		)
 
-		patchID := makePatchID(taskUUID, patchName)
+		patchID := geometry.MakePatchID(taskUUID, patchName)
 
-		patchMeta = append(patchMeta, PatchMeta{
+		patchMeta = append(patchMeta, geometry.PatchMeta{
 			Name:        patchName,
 			Geometry:    patchGeometry,
 			PatchUUID:   patchID,
@@ -74,7 +77,7 @@ func handleRequestMessage(
 			TotalTiles:  totalTiles,
 		})
 
-		job := PatchJob{
+		job := geometry.PatchJob{
 			Name:        patchName,
 			TaskUUID:    taskUUID,
 			AreaID:      areaID,
@@ -83,14 +86,14 @@ func handleRequestMessage(
 			TotalTiles:  totalTiles,
 		}
 
-		if err := processPatch(ctx, cfg, resources, job); err != nil {
+		if err := geometry.ProcessPatch(ctx, cfg, resources, job); err != nil {
 			return fmt.Errorf("process patch %s: %w", patchName, err)
 		}
 	}
 
-	featureCollection := buildTaskFeatureCollection(patchMeta)
+	featureCollection := geometry.BuildTaskFeatureCollection(patchMeta)
 
-	if err := publishTaskGeometry(resources, taskUUID, featureCollection); err != nil {
+	if err := geometry.PublishTaskGeometry(resources, taskUUID, featureCollection); err != nil {
 		return fmt.Errorf("publish task geometry: %w", err)
 	}
 

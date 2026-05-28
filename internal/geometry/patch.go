@@ -1,8 +1,12 @@
-package main
+package geometry
 
 import (
 	"context"
 	"fmt"
+	"geo-worker-go/internal/config"
+	"geo-worker-go/internal/models"
+	"geo-worker-go/internal/natsclient"
+
 	"log"
 	"time"
 
@@ -14,21 +18,21 @@ type PatchJob struct {
 	TaskUUID    string
 	AreaID      int
 	LayerID     int
-	TilesByZoom map[string][]Tile
+	TilesByZoom map[string][]models.Tile
 	TotalTiles  int
 }
 
-func makePatchID(taskUUID string, patchName string) string {
+func MakePatchID(taskUUID string, patchName string) string {
 	return uuid.NewSHA1(
 		uuid.NameSpaceDNS,
 		[]byte(fmt.Sprintf("%s:%s", taskUUID, patchName)),
 	).String()
 }
 
-func processPatch(
+func ProcessPatch(
 	ctx context.Context,
-	cfg Config,
-	resources *NATSResources,
+	cfg config.Config,
+	resources *natsclient.NATSResources,
 	job PatchJob,
 ) error {
 	select {
@@ -37,14 +41,14 @@ func processPatch(
 	default:
 	}
 
-	patchID := makePatchID(job.TaskUUID, job.Name)
+	patchID := MakePatchID(job.TaskUUID, job.Name)
 
 	eventID, err := uuid.NewUUID()
 	if err != nil {
 		eventID = uuid.New()
 	}
 
-	patchMsg := PatchMessage{
+	patchMsg := models.PatchMessage{
 		Name:        job.Name,
 		TilesByZoom: job.TilesByZoom,
 		AreaID:      job.AreaID,
@@ -53,7 +57,7 @@ func processPatch(
 		PatchUUID:   patchID,
 	}
 
-	progressMsg := ProgressMessage{
+	progressMsg := models.ProgressMessage{
 		EventID:        eventID.String(),
 		TaskID:         job.TaskUUID,
 		PatchID:        patchID,
@@ -64,13 +68,13 @@ func processPatch(
 		Timestamp:      time.Now().UTC().Format(time.RFC3339Nano),
 	}
 
-	if err := publishPatch(resources.JS, cfg, patchMsg); err != nil {
+	if err := natsclient.PublishPatch(resources.JS, cfg, patchMsg); err != nil {
 		return fmt.Errorf("publish patch %s: %w", job.Name, err)
 	}
 
 	log.Printf("Published patch %s", job.Name)
 
-	if err := publishProgress(resources.JS, cfg, progressMsg); err != nil {
+	if err := natsclient.PublishProgress(resources.JS, cfg, progressMsg); err != nil {
 		return fmt.Errorf("publish progress for patch %s: %w", job.Name, err)
 	}
 

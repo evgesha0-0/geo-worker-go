@@ -1,8 +1,9 @@
-package main
+package geometry
 
 import (
 	"encoding/json"
 	"fmt"
+	"geo-worker-go/internal/models"
 	"math"
 
 	"github.com/peterstace/simplefeatures/geom"
@@ -14,7 +15,7 @@ type GeoTile struct {
 	Z int
 }
 
-func readGeoJSONRequest(body map[string]any) (any, []int, int, string, int, int, error) {
+func ReadGeoJSONRequest(body map[string]any) (any, []int, int, string, int, int, error) {
 	if body == nil {
 		return nil, nil, 0, "", 0, 0, fmt.Errorf("body должен быть отображаемым объектом (Mapping), например dict")
 	}
@@ -126,7 +127,7 @@ func readGeoJSONRequest(body map[string]any) (any, []int, int, string, int, int,
 	return unioned, zLevels, zPatch, taskUUID, areaID, layerID, nil
 }
 
-func getBelongingTiles(geometry any, zoom int) ([]GeoTile, error) {
+func GetBelongingTiles(geometry any, zoom int) ([]GeoTile, error) {
 
 	sourceGeometry, ok := geometry.(geom.Geometry)
 	if !ok {
@@ -172,7 +173,7 @@ func getBelongingTiles(geometry any, zoom int) ([]GeoTile, error) {
 
 }
 
-func getPatches(geometry any, tiles []GeoTile, paddingKm float64) (map[string]any, error) {
+func GetPatches(geometry any, tiles []GeoTile, paddingKm float64) (map[string]any, error) {
 	sourceGeometry, ok := geometry.(geom.Geometry)
 	if !ok {
 		return nil, fmt.Errorf("geometry must be geom.Geometry")
@@ -230,9 +231,9 @@ func getPatches(geometry any, tiles []GeoTile, paddingKm float64) (map[string]an
 	return result, nil
 }
 
-func serializeTile(tile GeoTile) Tile {
+func SerializeTile(tile GeoTile) models.Tile {
 
-	return Tile{
+	return models.Tile{
 		"x": tile.X,
 		"y": tile.Y,
 		"z": tile.Z,

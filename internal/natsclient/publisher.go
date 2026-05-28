@@ -1,13 +1,14 @@
-package main
+package natsclient
 
 import (
 	"encoding/json"
 	"fmt"
+	"geo-worker-go/internal/config"
 
 	"github.com/nats-io/nats.go"
 )
 
-func publishJSON(
+func PublishJSON(
 	js nats.JetStreamContext,
 	subject string,
 	payload any,
@@ -24,26 +25,26 @@ func publishJSON(
 	return nil
 }
 
-func publishPatch(
+func PublishPatch(
 	js nats.JetStreamContext,
-	cfg Config,
+	cfg config.Config,
 	patchMsg any,
 ) error {
-	return publishJSON(js, cfg.Subject_Patch, patchMsg)
+	return PublishJSON(js, cfg.Subject_Patch, patchMsg)
 }
 
-func publishProgress(
+func PublishProgress(
 	js nats.JetStreamContext,
-	cfg Config,
+	cfg config.Config,
 	progressMsg any,
 ) error {
-	return publishJSON(js, cfg.Subject_Progress, progressMsg)
+	return PublishJSON(js, cfg.Subject_Progress, progressMsg)
 }
 
-func publishDLQ(
+func PublishDLQ(
 	js nats.JetStreamContext,
-	cfg Config,
+	cfg config.Config,
 	dlqPayload any,
 ) error {
-	return publishJSON(js, cfg.Subject_DLQ, dlqPayload)
+	return PublishJSON(js, cfg.Subject_DLQ, dlqPayload)
 }

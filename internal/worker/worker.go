@@ -1,9 +1,11 @@
-package main
+package worker
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"geo-worker-go/internal/config"
+	"geo-worker-go/internal/natsclient"
 	"log"
 	"sync"
 	"time"
@@ -11,7 +13,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-func StartWorker(ctx context.Context, cfg Config, resources *NATSResources) error {
+func StartWorker(ctx context.Context, cfg config.Config, resources *natsclient.NATSResources) error {
 	semaphore := make(chan struct{}, cfg.Concurrency)
 
 	var wg sync.WaitGroup
@@ -60,7 +62,7 @@ func StartWorker(ctx context.Context, cfg Config, resources *NATSResources) erro
 					<-semaphore
 				}()
 
-				if err := handleRequestMessage(ctx, cfg, resources, message); err != nil {
+				if err := HandleRequestMessage(ctx, cfg, resources, message); err != nil {
 					log.Printf("handle request message failed: %v", err)
 
 					if nakErr := message.Nak(); nakErr != nil {

@@ -1,8 +1,9 @@
-package main
+package natsclient
 
 import (
 	"errors"
 	"fmt"
+	"geo-worker-go/internal/config"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -16,7 +17,7 @@ type NATSResources struct {
 	AdvisorySub *nats.Subscription
 }
 
-func ConnectNATS(cfg Config) (*NATSResources, error) {
+func ConnectNATS(cfg config.Config) (*NATSResources, error) {
 	conn, err := nats.Connect(
 		cfg.NATS_URL,
 		nats.UserInfo(cfg.NATS_User, cfg.NATS_Pass),

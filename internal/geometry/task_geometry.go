@@ -1,8 +1,11 @@
-package main
+package geometry
 
 import (
 	"encoding/json"
 	"fmt"
+
+	"geo-worker-go/internal/models"
+	"geo-worker-go/internal/natsclient"
 	"log"
 	"sync"
 )
@@ -11,16 +14,16 @@ type PatchMeta struct {
 	Name        string
 	Geometry    any
 	PatchUUID   string
-	TilesByZoom map[string][]Tile
+	TilesByZoom map[string][]models.Tile
 	TotalTiles  int
 }
 
-func computeTilesByZoom(
-	geometry any,
+func ComputeTilesByZoom(
+	geometryData any,
 	zLevels []int,
 	patchName string,
-) (map[string][]Tile, int) {
-	tilesByZoom := make(map[string][]Tile)
+) (map[string][]models.Tile, int) {
+	tilesByZoom := make(map[string][]models.Tile)
 	totalTiles := 0
 
 	var mutex sync.Mutex
@@ -34,21 +37,21 @@ func computeTilesByZoom(
 		go func() {
 			defer waitGroup.Done()
 
-			tiles, err := getBelongingTiles(geometry, zoom)
+			tiles, err := GetBelongingTiles(geometryData, zoom)
 			if err != nil {
 				log.Printf("getBelongingTiles failed for zoom=%d in patch=%s: %v", zoom, patchName, err)
 
 				mutex.Lock()
-				tilesByZoom[fmt.Sprintf("%d", zoom)] = []Tile{}
+				tilesByZoom[fmt.Sprintf("%d", zoom)] = []models.Tile{}
 				mutex.Unlock()
 
 				return
 			}
 
-			serializedTiles := make([]Tile, 0, len(tiles))
+			serializedTiles := make([]models.Tile, 0, len(tiles))
 
 			for _, tile := range tiles {
-				serializedTiles = append(serializedTiles, serializeTile(tile))
+				serializedTiles = append(serializedTiles, SerializeTile(tile))
 			}
 
 			mutex.Lock()
@@ -63,14 +66,14 @@ func computeTilesByZoom(
 	return tilesByZoom, totalTiles
 }
 
-func buildTaskFeatureCollection(patchMeta []PatchMeta) FeatureCollection {
-	features := make([]Feature, 0, len(patchMeta))
+func BuildTaskFeatureCollection(patchMeta []PatchMeta) models.FeatureCollection {
+	features := make([]models.Feature, 0, len(patchMeta))
 
 	for _, meta := range patchMeta {
-		feature := Feature{
+		feature := models.Feature{
 			Type:     "Feature",
 			Geometry: meta.Geometry,
-			Properties: FeatureProperties{
+			Properties: models.FeatureProperties{
 				PatchName:  meta.Name,
 				PatchUUID:  meta.PatchUUID,
 				TotalTiles: meta.TotalTiles,
@@ -80,16 +83,16 @@ func buildTaskFeatureCollection(patchMeta []PatchMeta) FeatureCollection {
 		features = append(features, feature)
 	}
 
-	return FeatureCollection{
+	return models.FeatureCollection{
 		Type:     "FeatureCollection",
 		Features: features,
 	}
 }
 
-func publishTaskGeometry(
-	resources *NATSResources,
+func PublishTaskGeometry(
+	resources *natsclient.NATSResources,
 	taskUUID string,
-	featureCollection FeatureCollection,
+	featureCollection models.FeatureCollection,
 ) error {
 	payload, err := json.Marshal(featureCollection)
 	if err != nil {
