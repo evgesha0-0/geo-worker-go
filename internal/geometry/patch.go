@@ -3,13 +3,12 @@ package geometry
 import (
 	"context"
 	"fmt"
-	"geo-worker-go/internal/config"
-	"geo-worker-go/internal/models"
-	"geo-worker-go/internal/natsclient"
-
 	"log/slog"
 	"time"
 
+	"geo-worker-go/internal/config"
+	"geo-worker-go/internal/models"
+	"geo-worker-go/internal/natsclient"
 	"github.com/google/uuid"
 )
 
@@ -25,7 +24,7 @@ type PatchJob struct {
 func MakePatchID(taskUUID string, patchName string) string {
 	return uuid.NewSHA1(
 		uuid.NameSpaceDNS,
-		[]byte(fmt.Sprintf("%s:%s", taskUUID, patchName)),
+		fmt.Appendf(nil, "%s:%s", taskUUID, patchName),
 	).String()
 }
 
@@ -37,7 +36,7 @@ func ProcessPatch(
 ) error {
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("handle request context done: %w", ctx.Err())
 	default:
 	}
 
@@ -68,13 +67,15 @@ func ProcessPatch(
 		Timestamp:      time.Now().UTC().Format(time.RFC3339Nano),
 	}
 
-	if err := natsclient.PublishPatch(resources.JS, cfg, patchMsg); err != nil {
+	err = natsclient.PublishPatch(resources.JS, cfg, patchMsg)
+	if err != nil {
 		return fmt.Errorf("publish patch %s: %w", job.Name, err)
 	}
 
 	slog.Info("Published patch", "patch_name", job.Name)
 
-	if err := natsclient.PublishProgress(resources.JS, cfg, progressMsg); err != nil {
+	err = natsclient.PublishProgress(resources.JS, cfg, progressMsg)
+	if err != nil {
 		return fmt.Errorf("publish progress for patch %s: %w", job.Name, err)
 	}
 

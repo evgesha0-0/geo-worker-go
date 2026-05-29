@@ -3,11 +3,12 @@ package geometry
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"strconv"
+	"sync"
 
 	"geo-worker-go/internal/models"
 	"geo-worker-go/internal/natsclient"
-	"log/slog"
-	"sync"
 )
 
 type PatchMeta struct {
@@ -26,17 +27,13 @@ func ComputeTilesByZoom(
 	tilesByZoom := make(map[string][]models.Tile)
 	totalTiles := 0
 
-	var mutex sync.Mutex
-	var waitGroup sync.WaitGroup
+	var (
+		mutex     sync.Mutex
+		waitGroup sync.WaitGroup
+	)
 
 	for _, zoom := range zLevels {
-		zoom := zoom
-
-		waitGroup.Add(1)
-
-		go func() {
-			defer waitGroup.Done()
-
+		waitGroup.Go(func() {
 			tiles, err := GetBelongingTiles(geometryData, zoom)
 			if err != nil {
 				slog.Error(
@@ -47,7 +44,7 @@ func ComputeTilesByZoom(
 				)
 
 				mutex.Lock()
-				tilesByZoom[fmt.Sprintf("%d", zoom)] = []models.Tile{}
+				tilesByZoom[strconv.Itoa(zoom)] = []models.Tile{}
 				mutex.Unlock()
 
 				return
@@ -60,10 +57,10 @@ func ComputeTilesByZoom(
 			}
 
 			mutex.Lock()
-			tilesByZoom[fmt.Sprintf("%d", zoom)] = serializedTiles
+			tilesByZoom[strconv.Itoa(zoom)] = serializedTiles
 			totalTiles += len(serializedTiles)
 			mutex.Unlock()
-		}()
+		})
 	}
 
 	waitGroup.Wait()

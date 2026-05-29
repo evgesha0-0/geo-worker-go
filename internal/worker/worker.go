@@ -4,17 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"geo-worker-go/internal/config"
-	"geo-worker-go/internal/natsclient"
 	"log/slog"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
+	"geo-worker-go/internal/config"
+	"geo-worker-go/internal/natsclient"
 	"github.com/nats-io/nats.go"
+	"golang.org/x/sync/errgroup"
 )
 
-func StartWorker(ctx context.Context, cfg config.Config, resources *natsclient.NATSResources) error {
+func StartWorker(
+	ctx context.Context,
+	cfg config.Config,
+	resources *natsclient.NATSResources,
+) error {
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(cfg.Concurrency)
 
@@ -26,7 +29,13 @@ func StartWorker(ctx context.Context, cfg config.Config, resources *natsclient.N
 		select {
 		case <-groupCtx.Done():
 			slog.Info("worker shutdown requested")
-			return group.Wait()
+
+			err := group.Wait()
+			if err != nil {
+				return fmt.Errorf("wait worker group: %w", err)
+			}
+
+			return nil
 
 		default:
 		}
@@ -35,7 +44,6 @@ func StartWorker(ctx context.Context, cfg config.Config, resources *natsclient.N
 			cfg.Batch,
 			nats.MaxWait(1*time.Second),
 		)
-
 		if err != nil {
 			if errors.Is(err, nats.ErrTimeout) {
 				continue
@@ -48,17 +56,20 @@ func StartWorker(ctx context.Context, cfg config.Config, resources *natsclient.N
 			message := msg
 
 			group.Go(func() error {
-				if err := HandleRequestMessage(groupCtx, cfg, resources, message); err != nil {
+				err := HandleRequestMessage(groupCtx, cfg, resources, message)
+				if err != nil {
 					slog.Error("handle request message failed", "error", err)
 
-					if nakErr := message.Nak(); nakErr != nil {
+					nakErr := message.Nak()
+					if nakErr != nil {
 						slog.Error("nak message failed", "error", nakErr)
 					}
 
 					return nil
 				}
 
-				if ackErr := message.Ack(); ackErr != nil {
+				ackErr := message.Ack()
+				if ackErr != nil {
 					slog.Error("ack message failed", "error", ackErr)
 				}
 

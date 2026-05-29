@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"geo-worker-go/internal/config"
-	"geo-worker-go/internal/geometry"
-	"geo-worker-go/internal/natsclient"
 	"log/slog"
 	"time"
 
+	"geo-worker-go/internal/config"
+	"geo-worker-go/internal/geometry"
+	"geo-worker-go/internal/natsclient"
 	"github.com/nats-io/nats.go"
 )
 
@@ -37,11 +37,14 @@ func HandleRequestMessage(
 
 	var body map[string]any
 
-	if err := json.Unmarshal(msg.Data, &body); err != nil {
+	err := json.Unmarshal(msg.Data, &body)
+	if err != nil {
 		return fmt.Errorf("decode request json: %w", err)
 	}
 
-	geometryData, zLevels, zPatch, taskUUID, areaID, layerID, err := geometry.ReadGeoJSONRequest(body)
+	geometryData, zLevels, zPatch, taskUUID, areaID, layerID, err := geometry.ReadGeoJSONRequest(
+		body,
+	)
 	if err != nil {
 		return fmt.Errorf("read geojson request: %w", err)
 	}
@@ -61,7 +64,7 @@ func HandleRequestMessage(
 	for patchName, patchGeometry := range patches {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("process patch context done: %w", ctx.Err())
 		default:
 		}
 
@@ -90,14 +93,16 @@ func HandleRequestMessage(
 			TotalTiles:  totalTiles,
 		}
 
-		if err := geometry.ProcessPatch(ctx, cfg, resources, job); err != nil {
+		err := geometry.ProcessPatch(ctx, cfg, resources, job)
+		if err != nil {
 			return fmt.Errorf("process patch %s: %w", patchName, err)
 		}
 	}
 
 	featureCollection := geometry.BuildTaskFeatureCollection(patchMeta)
 
-	if err := geometry.PublishTaskGeometry(resources, taskUUID, featureCollection); err != nil {
+	err = geometry.PublishTaskGeometry(resources, taskUUID, featureCollection)
+	if err != nil {
 		return fmt.Errorf("publish task geometry: %w", err)
 	}
 

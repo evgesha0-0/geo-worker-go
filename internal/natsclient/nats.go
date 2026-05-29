@@ -3,9 +3,9 @@ package natsclient
 import (
 	"errors"
 	"fmt"
-	"geo-worker-go/internal/config"
 	"time"
 
+	"geo-worker-go/internal/config"
 	"github.com/nats-io/nats.go"
 )
 
@@ -26,44 +26,60 @@ func ConnectNATS(cfg config.Config) (*NATSResources, error) {
 		return nil, fmt.Errorf("connect to NATS: %w", err)
 	}
 
-	js, err := conn.JetStream()
+	jetStream, err := conn.JetStream()
 	if err != nil {
 		conn.Close()
+
 		return nil, fmt.Errorf("create JetStream context: %w", err)
 	}
 
-	if err := ensureStream(js, cfg.Stream_Req, cfg.Subject_Req); err != nil {
+	err = ensureStream(jetStream, cfg.Stream_Req, cfg.Subject_Req)
+	if err != nil {
 		conn.Close()
+
 		return nil, fmt.Errorf("ensure request stream: %w", err)
 	}
 
-	if err := ensureStream(js, cfg.Stream_Patches, cfg.Subject_Patch); err != nil {
+	err = ensureStream(jetStream, cfg.Stream_Patches, cfg.Subject_Patch)
+	if err != nil {
 		conn.Close()
+
 		return nil, fmt.Errorf("ensure patches stream: %w", err)
 	}
 
-	if err := ensureStream(js, cfg.Stream_Progress, cfg.Subject_Progress); err != nil {
+	err = ensureStream(jetStream, cfg.Stream_Progress, cfg.Subject_Progress)
+	if err != nil {
 		conn.Close()
+
 		return nil, fmt.Errorf("ensure progress stream: %w", err)
 	}
 
-	if err := ensureStream(js, cfg.Stream_DLQ, cfg.Subject_DLQ); err != nil {
+	err = ensureStream(jetStream, cfg.Stream_DLQ, cfg.Subject_DLQ)
+	if err != nil {
 		conn.Close()
+
 		return nil, fmt.Errorf("ensure dlq stream: %w", err)
 	}
 
-	objectStore, err := js.ObjectStore(cfg.Object_Store_Bucket)
+	objectStore, err := jetStream.ObjectStore(cfg.Object_Store_Bucket)
 	if err != nil {
-		objectStore, err = js.CreateObjectStore(&nats.ObjectStoreConfig{
-			Bucket: cfg.Object_Store_Bucket,
-		})
+		objectStore, err = jetStream.CreateObjectStore(
+			&nats.ObjectStoreConfig{ //nolint: exhaustruct
+				Bucket: cfg.Object_Store_Bucket,
+			},
+		)
 		if err != nil {
 			conn.Close()
-			return nil, fmt.Errorf("create object store bucket %s: %w", cfg.Object_Store_Bucket, err)
+
+			return nil, fmt.Errorf(
+				"create object store bucket %s: %w",
+				cfg.Object_Store_Bucket,
+				err,
+			)
 		}
 	}
 
-	requestSub, err := js.PullSubscribe(
+	requestSub, err := jetStream.PullSubscribe(
 		cfg.Subject_Req,
 		cfg.Durable_Name,
 		nats.BindStream(cfg.Stream_Req),
@@ -72,6 +88,7 @@ func ConnectNATS(cfg config.Config) (*NATSResources, error) {
 	)
 	if err != nil {
 		conn.Close()
+
 		return nil, fmt.Errorf("create pull subscription: %w", err)
 	}
 
@@ -83,20 +100,21 @@ func ConnectNATS(cfg config.Config) (*NATSResources, error) {
 	advisorySub, err := conn.SubscribeSync(advisorySubject)
 	if err != nil {
 		conn.Close()
+
 		return nil, fmt.Errorf("create advisory subscription: %w", err)
 	}
 
 	return &NATSResources{
 		Conn:        conn,
-		JS:          js,
+		JS:          jetStream,
 		ObjectStore: objectStore,
 		RequestSub:  requestSub,
 		AdvisorySub: advisorySub,
 	}, nil
 }
 
-func ensureStream(js nats.JetStreamContext, streamName string, subject string) error {
-	_, err := js.StreamInfo(streamName)
+func ensureStream(jetStream nats.JetStreamContext, streamName string, subject string) error {
+	_, err := jetStream.StreamInfo(streamName)
 	if err == nil {
 		return nil
 	}
@@ -105,11 +123,10 @@ func ensureStream(js nats.JetStreamContext, streamName string, subject string) e
 		return fmt.Errorf("get stream info %s: %w", streamName, err)
 	}
 
-	_, err = js.AddStream(&nats.StreamConfig{
+	_, err = jetStream.AddStream(&nats.StreamConfig{ //nolint: exhaustruct
 		Name:     streamName,
 		Subjects: []string{subject},
 	})
-
 	if err != nil {
 		return fmt.Errorf("create stream %s: %w", streamName, err)
 	}

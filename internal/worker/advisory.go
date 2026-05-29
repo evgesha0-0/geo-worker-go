@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"geo-worker-go/internal/config"
-	"geo-worker-go/internal/models"
-	"geo-worker-go/internal/natsclient"
-
 	"log/slog"
 	"strconv"
 
+	"geo-worker-go/internal/config"
+	"geo-worker-go/internal/models"
+	"geo-worker-go/internal/natsclient"
 	"github.com/nats-io/nats.go"
 )
 
@@ -24,16 +23,19 @@ func startAdvisoryLoop(
 	for {
 		rawMsg, err := resources.AdvisorySub.NextMsgWithContext(ctx)
 		if err != nil {
-			if ctx.Err() != nil {
+			ctxErr := ctx.Err()
+			if ctxErr != nil {
 				slog.Info("advisory loop stopped")
-				return nil
+
+				return fmt.Errorf("advisory loop stopped: %w", ctxErr)
 			}
 
 			return fmt.Errorf("read advisory message: %w", err)
 		}
 
 		go func(msg *nats.Msg) {
-			if err := handleAdvisoryMessage(cfg, resources, msg); err != nil {
+			err = handleAdvisoryMessage(cfg, resources, msg)
+			if err != nil {
 				slog.Error("handle advisory message failed", "error", err)
 			}
 		}(rawMsg)
@@ -47,7 +49,8 @@ func handleAdvisoryMessage(
 ) error {
 	var advisory map[string]any
 
-	if err := json.Unmarshal(rawMsg.Data, &advisory); err != nil {
+	err := json.Unmarshal(rawMsg.Data, &advisory)
+	if err != nil {
 		return fmt.Errorf("decode advisory json: %w", err)
 	}
 
@@ -88,7 +91,8 @@ func handleAdvisoryMessage(
 		}
 	}
 
-	if err := natsclient.PublishDLQ(resources.JS, cfg, dlqRecord); err != nil {
+	err = natsclient.PublishDLQ(resources.JS, cfg, dlqRecord)
+	if err != nil {
 		return fmt.Errorf("publish dlq record: %w", err)
 	}
 

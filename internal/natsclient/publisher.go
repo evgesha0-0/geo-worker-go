@@ -3,13 +3,13 @@ package natsclient
 import (
 	"encoding/json"
 	"fmt"
-	"geo-worker-go/internal/config"
 
+	"geo-worker-go/internal/config"
 	"github.com/nats-io/nats.go"
 )
 
 func PublishJSON(
-	js nats.JetStreamContext,
+	jetStream nats.JetStreamContext,
 	subject string,
 	payload any,
 ) error {
@@ -18,7 +18,8 @@ func PublishJSON(
 		return fmt.Errorf("marshal message for subject %s: %w", subject, err)
 	}
 
-	if _, err := js.Publish(subject, data); err != nil {
+	_, err = jetStream.Publish(subject, data)
+	if err != nil {
 		return fmt.Errorf("publish message to subject %s: %w", subject, err)
 	}
 

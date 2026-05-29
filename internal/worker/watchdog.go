@@ -20,11 +20,14 @@ func ackProgressWatchdog(
 		select {
 		case <-ctx.Done():
 			slog.Info("ack watchdog stopped")
+
 			return
 
 		case <-ticker.C:
-			if err := msg.InProgress(); err != nil {
+			err := msg.InProgress()
+			if err != nil {
 				slog.Warn("send in_progress ack failed", "error", err)
+
 				return
 			}
 

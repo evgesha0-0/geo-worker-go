@@ -2,10 +2,11 @@ package geometry
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"geo-worker-go/internal/models"
 	"math"
 
+	"geo-worker-go/internal/models"
 	"github.com/peterstace/simplefeatures/geom"
 )
 
@@ -15,39 +16,52 @@ type GeoTile struct {
 	Z int
 }
 
+const (
+	fullCircleDegrees      = 360.0
+	halfCircleDegrees      = 180.0
+	worldMinLongitude      = -180.0
+	worldMaxLongitude      = 180.0
+	worldMinLatitude       = -90.0
+	worldMaxLatitude       = 90.0
+	webMercatorMaxLatitude = 85.05112878
+	tileBase               = 2.0
+)
+
 func ReadGeoJSONRequest(body map[string]any) (any, []int, int, string, int, int, error) {
 	if body == nil {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("body должен быть отображаемым объектом (Mapping), например dict")
+		return nil, nil, 0, "", 0, 0, errors.New(
+			"body должен быть отображаемым объектом (Mapping), например dict",
+		)
 	}
 
 	geoJSONRaw, ok := body["geojson"]
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("отсутствует поле 'geojson' в теле запроса")
+		return nil, nil, 0, "", 0, 0, errors.New("отсутствует поле 'geojson' в теле запроса")
 	}
 
 	zLevelsRaw, ok := body["z_levels"]
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("отсутствует поле 'z_levels' в теле запроса")
+		return nil, nil, 0, "", 0, 0, errors.New("отсутствует поле 'z_levels' в теле запроса")
 	}
 
 	zPatchRaw, ok := body["z_patch"]
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("отсутствует поле 'z_patch' в теле запроса")
+		return nil, nil, 0, "", 0, 0, errors.New("отсутствует поле 'z_patch' в теле запроса")
 	}
 
 	taskUUIDRaw, ok := body["uuid"]
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("отсутствует поле 'uuid' в теле запроса")
+		return nil, nil, 0, "", 0, 0, errors.New("отсутствует поле 'uuid' в теле запроса")
 	}
 
 	areaIDRaw, ok := body["area_id"]
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("отсутствует поле 'area_id' в теле запроса")
+		return nil, nil, 0, "", 0, 0, errors.New("отсутствует поле 'area_id' в теле запроса")
 	}
 
 	layerIDRaw, ok := body["layer_id"]
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("отсутствует поле 'layer_id' в теле запроса")
+		return nil, nil, 0, "", 0, 0, errors.New("отсутствует поле 'layer_id' в теле запроса")
 	}
 
 	zLevels, err := parseIntSlice(zLevelsRaw, "z_levels")
@@ -62,7 +76,7 @@ func ReadGeoJSONRequest(body map[string]any) (any, []int, int, string, int, int,
 
 	taskUUID, ok := taskUUIDRaw.(string)
 	if !ok || taskUUID == "" {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("uuid должен быть строкой (str)")
+		return nil, nil, 0, "", 0, 0, errors.New("uuid должен быть строкой (str)")
 	}
 
 	areaID, err := parseInt(areaIDRaw, "area_id")
@@ -77,20 +91,24 @@ func ReadGeoJSONRequest(body map[string]any) (any, []int, int, string, int, int,
 
 	geoJSONMap, ok := geoJSONRaw.(map[string]any)
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("geojson должен быть объектом")
+		return nil, nil, 0, "", 0, 0, errors.New("geojson должен быть объектом")
 	}
 
 	if geoJSONMap["type"] != "FeatureCollection" {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("ожидается GeoJSON типа 'FeatureCollection' в поле 'geojson'")
+		return nil, nil, 0, "", 0, 0, errors.New(
+			"ожидается GeoJSON типа 'FeatureCollection' в поле 'geojson'",
+		)
 	}
 
 	rawFeatures, ok := geoJSONMap["features"].([]any)
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("поле 'features' должно быть списком")
+		return nil, nil, 0, "", 0, 0, errors.New("поле 'features' должно быть списком")
 	}
 
 	if len(rawFeatures) == 0 {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("FeatureCollection должен содержать хотя бы один элемент")
+		return nil, nil, 0, "", 0, 0, errors.New(
+			"FeatureCollection должен содержать хотя бы один элемент",
+		)
 	}
 
 	geometries := make([]geom.Geometry, 0, len(rawFeatures))
@@ -98,22 +116,36 @@ func ReadGeoJSONRequest(body map[string]any) (any, []int, int, string, int, int,
 	for index, rawFeature := range rawFeatures {
 		feature, ok := rawFeature.(map[string]any)
 		if !ok {
-			return nil, nil, 0, "", 0, 0, fmt.Errorf("feature с индексом %d должен быть объектом", index)
+			return nil, nil, 0, "", 0, 0, fmt.Errorf(
+				"feature с индексом %d должен быть объектом",
+				index,
+			)
 		}
 
 		rawGeometry, ok := feature["geometry"]
 		if !ok || rawGeometry == nil {
-			return nil, nil, 0, "", 0, 0, fmt.Errorf("feature с индексом %d не содержит 'geometry'", index)
+			return nil, nil, 0, "", 0, 0, fmt.Errorf(
+				"feature с индексом %d не содержит 'geometry'",
+				index,
+			)
 		}
 
 		geometryBytes, err := json.Marshal(rawGeometry)
 		if err != nil {
-			return nil, nil, 0, "", 0, 0, fmt.Errorf("не удалось сериализовать geometry с индексом %d: %w", index, err)
+			return nil, nil, 0, "", 0, 0, fmt.Errorf(
+				"не удалось сериализовать geometry с индексом %d: %w",
+				index,
+				err,
+			)
 		}
 
 		geometry, err := geom.UnmarshalGeoJSON(geometryBytes)
 		if err != nil {
-			return nil, nil, 0, "", 0, 0, fmt.Errorf("не удалось разобрать geometry с индексом %d: %w", index, err)
+			return nil, nil, 0, "", 0, 0, fmt.Errorf(
+				"не удалось разобрать geometry с индексом %d: %w",
+				index,
+				err,
+			)
 		}
 
 		geometries = append(geometries, geometry)
@@ -128,55 +160,64 @@ func ReadGeoJSONRequest(body map[string]any) (any, []int, int, string, int, int,
 }
 
 func GetBelongingTiles(geometry any, zoom int) ([]GeoTile, error) {
-
 	sourceGeometry, ok := geometry.(geom.Geometry)
 	if !ok {
-		return nil, fmt.Errorf("geometry must be geom.Geometry")
+		return nil, errors.New("geometry must be geom.Geometry")
 	}
+
 	if sourceGeometry.IsEmpty() {
 		return []GeoTile{}, nil
 	}
+
 	leftGeometry, rightGeometry, err := splitByAntimeridian(sourceGeometry)
 	if err != nil {
 		return nil, err
 	}
+
 	result := make([]GeoTile, 0)
 	seen := make(map[string]bool)
+
 	if !leftGeometry.IsEmpty() {
 		shiftedLeft := shift360(leftGeometry, -1)
+
 		leftTiles, err := tilesForGeometry(shiftedLeft, zoom)
 		if err != nil {
 			return nil, fmt.Errorf("get tiles for left geometry: %w", err)
 		}
+
 		for _, tile := range leftTiles {
 			key := tileKey(tile)
 			if !seen[key] {
 				seen[key] = true
+
 				result = append(result, tile)
 			}
 		}
 	}
+
 	if !rightGeometry.IsEmpty() {
 		rightTiles, err := tilesForGeometry(rightGeometry, zoom)
 		if err != nil {
 			return nil, fmt.Errorf("get tiles for right geometry: %w", err)
 		}
+
 		for _, tile := range rightTiles {
 			key := tileKey(tile)
 			if !seen[key] {
 				seen[key] = true
+
 				result = append(result, tile)
 			}
 		}
 	}
-	return result, nil
 
+	return result, nil
 }
 
 func GetPatches(geometry any, tiles []GeoTile, paddingKm float64) (map[string]any, error) {
 	sourceGeometry, ok := geometry.(geom.Geometry)
 	if !ok {
-		return nil, fmt.Errorf("geometry must be geom.Geometry")
+		return nil, errors.New("geometry must be geom.Geometry")
 	}
 
 	result := make(map[string]any)
@@ -203,12 +244,20 @@ func GetPatches(geometry any, tiles []GeoTile, paddingKm float64) (map[string]an
 
 		intersectionA, err := geom.Intersection(sourceGeometry, boxExpanded)
 		if err != nil {
-			return nil, fmt.Errorf("intersect geometry with expanded tile for patch %s: %w", patchName, err)
+			return nil, fmt.Errorf(
+				"intersect geometry with expanded tile for patch %s: %w",
+				patchName,
+				err,
+			)
 		}
 
 		intersectionB, err := geom.Intersection(sourceGeometry, shiftedBoxExpanded)
 		if err != nil {
-			return nil, fmt.Errorf("intersect geometry with shifted expanded tile for patch %s: %w", patchName, err)
+			return nil, fmt.Errorf(
+				"intersect geometry with shifted expanded tile for patch %s: %w",
+				patchName,
+				err,
+			)
 		}
 
 		patch, err := geom.UnionMany([]geom.Geometry{
@@ -223,7 +272,8 @@ func GetPatches(geometry any, tiles []GeoTile, paddingKm float64) (map[string]an
 			continue
 		}
 
-		if geom.Intersects(boxGeometry, sourceGeometry) || geom.Intersects(shiftedBoxGeometry, sourceGeometry) {
+		if geom.Intersects(boxGeometry, sourceGeometry) ||
+			geom.Intersects(shiftedBoxGeometry, sourceGeometry) {
 			result[patchName] = patch
 		}
 	}
@@ -232,13 +282,11 @@ func GetPatches(geometry any, tiles []GeoTile, paddingKm float64) (map[string]an
 }
 
 func SerializeTile(tile GeoTile) models.Tile {
-
 	return models.Tile{
 		"x": tile.X,
 		"y": tile.Y,
 		"z": tile.Z,
 	}
-
 }
 
 func parseIntSlice(value any, fieldName string) ([]int, error) {
@@ -261,11 +309,13 @@ func parseIntSlice(value any, fieldName string) ([]int, error) {
 		}
 
 		seen[parsed] = true
+
 		result = append(result, parsed)
 	}
 
 	return result, nil
 }
+
 func parseInt(value any, fieldName string) (int, error) {
 	switch typedValue := value.(type) {
 	case int:
@@ -287,19 +337,20 @@ func parseInt(value any, fieldName string) (int, error) {
 }
 
 func tilesForGeometry(sourceGeometry geom.Geometry, zoom int) ([]GeoTile, error) {
-
 	west, south, east, north, ok := geometryBounds(sourceGeometry)
 	if !ok {
 		return []GeoTile{}, nil
 	}
+
 	minTileX, minTileY := lonLatToTile(west, north, zoom)
 	maxTileX, maxTileY := lonLatToTile(east, south, zoom)
 	maxIndex := (1 << zoom) - 1
-	minTileX = clampInt(minTileX, 0, maxIndex)
-	maxTileX = clampInt(maxTileX, 0, maxIndex)
-	minTileY = clampInt(minTileY, 0, maxIndex)
-	maxTileY = clampInt(maxTileY, 0, maxIndex)
+	minTileX = clampInt(minTileX, maxIndex)
+	maxTileX = clampInt(maxTileX, maxIndex)
+	minTileY = clampInt(minTileY, maxIndex)
+	maxTileY = clampInt(maxTileY, maxIndex)
 	result := make([]GeoTile, 0)
+
 	for x := minTileX; x <= maxTileX; x++ {
 		for y := minTileY; y <= maxTileY; y++ {
 			tile := GeoTile{
@@ -307,71 +358,98 @@ func tilesForGeometry(sourceGeometry geom.Geometry, zoom int) ([]GeoTile, error)
 				Y: y,
 				Z: zoom,
 			}
+
 			tileGeometry, err := tileToGeometry(tile)
 			if err != nil {
 				return nil, err
 			}
+
 			if geom.Intersects(tileGeometry, sourceGeometry) {
 				result = append(result, tile)
 			}
 		}
 	}
+
 	return result, nil
-
 }
-func shift360(sourceGeometry geom.Geometry, direction int) geom.Geometry {
 
+func shift360(sourceGeometry geom.Geometry, direction int) geom.Geometry {
 	return sourceGeometry.TransformXY(func(xy geom.XY) geom.XY {
 		return geom.XY{
-			X: xy.X + float64(direction*360),
+			X: xy.X + float64(direction)*fullCircleDegrees,
 			Y: xy.Y,
 		}
 	})
-
 }
-func splitByAntimeridian(sourceGeometry geom.Geometry) (geom.Geometry, geom.Geometry, error) {
 
+func splitByAntimeridian(sourceGeometry geom.Geometry) (geom.Geometry, geom.Geometry, error) {
 	if sourceGeometry.IsEmpty() {
 		empty, err := emptyGeometry()
 		if err != nil {
 			return geom.Geometry{}, geom.Geometry{}, err
 		}
+
 		return empty, empty, nil
 	}
+
 	west, _, east, _, ok := geometryBounds(sourceGeometry)
 	if !ok {
 		empty, err := emptyGeometry()
 		if err != nil {
 			return geom.Geometry{}, geom.Geometry{}, err
 		}
+
 		return empty, empty, nil
 	}
+
 	if west >= -180 && east <= 180 {
 		empty, err := emptyGeometry()
 		if err != nil {
 			return geom.Geometry{}, geom.Geometry{}, err
 		}
+
 		return empty, sourceGeometry, nil
 	}
-	leftBox, err := polygonFromBounds(180, -90, 360, 90)
+
+	leftBox, err := polygonFromBounds(
+		worldMaxLongitude,
+		worldMinLatitude,
+		fullCircleDegrees,
+		worldMaxLatitude,
+	)
 	if err != nil {
 		return geom.Geometry{}, geom.Geometry{}, err
 	}
-	rightBox, err := polygonFromBounds(-180, -90, 180, 90)
+
+	rightBox, err := polygonFromBounds(
+		worldMinLongitude,
+		worldMinLatitude,
+		worldMaxLongitude,
+		worldMinLatitude,
+	)
 	if err != nil {
 		return geom.Geometry{}, geom.Geometry{}, err
 	}
+
 	leftPart, err := geom.Intersection(sourceGeometry, leftBox)
 	if err != nil {
-		return geom.Geometry{}, geom.Geometry{}, fmt.Errorf("intersect left antimeridian box: %w", err)
+		return geom.Geometry{}, geom.Geometry{}, fmt.Errorf(
+			"intersect left antimeridian box: %w",
+			err,
+		)
 	}
+
 	rightPart, err := geom.Intersection(sourceGeometry, rightBox)
 	if err != nil {
-		return geom.Geometry{}, geom.Geometry{}, fmt.Errorf("intersect right antimeridian box: %w", err)
+		return geom.Geometry{}, geom.Geometry{}, fmt.Errorf(
+			"intersect right antimeridian box: %w",
+			err,
+		)
 	}
-	return leftPart, rightPart, nil
 
+	return leftPart, rightPart, nil
 }
+
 func bufferPoly(sourceGeometry geom.Geometry, distanceKm float64) (geom.Geometry, error) {
 	if sourceGeometry.IsEmpty() {
 		return sourceGeometry, nil
@@ -386,7 +464,7 @@ func bufferPoly(sourceGeometry geom.Geometry, distanceKm float64) (geom.Geometry
 	dlat := distanceKm / factor
 
 	dlon := func(lat float64) float64 {
-		cosValue := math.Cos(lat * math.Pi / 180.0)
+		cosValue := math.Cos(lat * math.Pi / worldMaxLongitude)
 		if cosValue == 0 {
 			return 0
 		}
@@ -413,50 +491,60 @@ func tileToGeometry(tile GeoTile) (geom.Geometry, error) {
 
 	return polygonFromBounds(west, south, east, north)
 }
-func tileBounds(tile GeoTile) (west float64, south float64, east float64, north float64) {
 
-	west = tileLon(tile.X, tile.Z)
-	east = tileLon(tile.X+1, tile.Z)
-	north = tileLat(tile.Y, tile.Z)
-	south = tileLat(tile.Y+1, tile.Z)
+func tileBounds(tile GeoTile) (float64, float64, float64, float64) {
+	west := tileLon(tile.X, tile.Z)
+	east := tileLon(tile.X+1, tile.Z)
+	north := tileLat(tile.Y, tile.Z)
+	south := tileLat(tile.Y+1, tile.Z)
+
 	return west, south, east, north
-
 }
+
 func tileLon(x int, z int) float64 {
+	n := math.Pow(tileBase, float64(z))
 
-	n := math.Pow(2, float64(z))
-	return float64(x)/n*360.0 - 180.0
-
+	return float64(x)/n*fullCircleDegrees - worldMaxLongitude
 }
+
 func tileLat(y int, z int) float64 {
-
-	n := math.Pow(2, float64(z))
+	n := math.Pow(tileBase, float64(z))
 	rad := math.Atan(math.Sinh(math.Pi * (1.0 - 2.0*float64(y)/n)))
-	return rad * 180.0 / math.Pi
 
+	return rad * worldMaxLongitude / math.Pi
 }
+
 func lonLatToTile(lon float64, lat float64, zoom int) (int, int) {
+	lat = math.Max(math.Min(lat, webMercatorMaxLatitude), -webMercatorMaxLatitude)
+	n := math.Pow(tileBase, float64(zoom))
+	x := int(math.Floor((lon + worldMaxLongitude) / fullCircleDegrees * n))
+	latRad := lat * math.Pi / worldMaxLongitude
+	y := int(
+		math.Floor((1.0 - math.Log(math.Tan(latRad)+1.0/math.Cos(latRad))/math.Pi) / tileBase * n),
+	)
 
-	lat = math.Max(math.Min(lat, 85.05112878), -85.05112878)
-	n := math.Pow(2, float64(zoom))
-	x := int(math.Floor((lon + 180.0) / 360.0 * n))
-	latRad := lat * math.Pi / 180.0
-	y := int(math.Floor((1.0 - math.Log(math.Tan(latRad)+1.0/math.Cos(latRad))/math.Pi) / 2.0 * n))
 	return x, y
-
 }
 
-func geometryBounds(sourceGeometry geom.Geometry) (west float64, south float64, east float64, north float64, ok bool) {
-
+func geometryBounds(
+	sourceGeometry geom.Geometry,
+) (float64, float64, float64, float64, bool) {
 	envelope := sourceGeometry.Envelope()
+
 	minXY, maxXY, ok := envelope.MinMaxXYs()
 	if !ok {
 		return 0, 0, 0, 0, false
 	}
-	return minXY.X, minXY.Y, maxXY.X, maxXY.Y, true
 
+	return minXY.X, minXY.Y, maxXY.X, maxXY.Y, true
 }
-func polygonFromBounds(west float64, south float64, east float64, north float64) (geom.Geometry, error) {
+
+func polygonFromBounds(
+	west float64,
+	south float64,
+	east float64,
+	north float64,
+) (geom.Geometry, error) {
 	return geometryFromPolygonCoords([][][]float64{
 		{
 			{west, south},
@@ -467,6 +555,7 @@ func polygonFromBounds(west float64, south float64, east float64, north float64)
 		},
 	})
 }
+
 func geometryFromPolygonCoords(coords [][][]float64) (geom.Geometry, error) {
 	polygon := struct {
 		Type        string        `json:"type"`
@@ -488,23 +577,24 @@ func geometryFromPolygonCoords(coords [][][]float64) (geom.Geometry, error) {
 
 	return geometry, nil
 }
+
 func emptyGeometry() (geom.Geometry, error) {
+	empty, err := geom.UnmarshalWKT("GEOMETRYCOLLECTION EMPTY")
+	if err != nil {
+		return geom.Geometry{}, fmt.Errorf("unmarshal empty geometry: %w", err)
+	}
 
-	return geom.UnmarshalWKT("GEOMETRYCOLLECTION EMPTY")
-
+	return empty, nil
 }
 
 func tileKey(tile GeoTile) string {
 	return fmt.Sprintf("%d_%d_%d", tile.X, tile.Y, tile.Z)
 }
-func clampInt(value int, minValue int, maxValue int) int {
 
-	if value < minValue {
-		return minValue
-	}
+func clampInt(value int, maxValue int) int {
 	if value > maxValue {
 		return maxValue
 	}
-	return value
 
+	return value
 }
