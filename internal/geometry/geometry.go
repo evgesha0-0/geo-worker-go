@@ -22,32 +22,32 @@ func ReadGeoJSONRequest(body map[string]any) (any, []int, int, string, int, int,
 
 	geoJSONRaw, ok := body["geojson"]
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("Отсутствует поле 'geojson' в теле запроса.")
+		return nil, nil, 0, "", 0, 0, fmt.Errorf("отсутствует поле 'geojson' в теле запроса")
 	}
 
 	zLevelsRaw, ok := body["z_levels"]
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("Отсутствует поле 'z_levels' в теле запроса.")
+		return nil, nil, 0, "", 0, 0, fmt.Errorf("отсутствует поле 'z_levels' в теле запроса")
 	}
 
 	zPatchRaw, ok := body["z_patch"]
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("Отсутствует поле 'z_patch' в теле запроса.")
+		return nil, nil, 0, "", 0, 0, fmt.Errorf("отсутствует поле 'z_patch' в теле запроса")
 	}
 
 	taskUUIDRaw, ok := body["uuid"]
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("Отсутствует поле 'uuid' в теле запроса.")
+		return nil, nil, 0, "", 0, 0, fmt.Errorf("отсутствует поле 'uuid' в теле запроса")
 	}
 
 	areaIDRaw, ok := body["area_id"]
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("Отсутствует поле 'area_id' в теле запроса.")
+		return nil, nil, 0, "", 0, 0, fmt.Errorf("отсутствует поле 'area_id' в теле запроса")
 	}
 
 	layerIDRaw, ok := body["layer_id"]
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("Отсутствует поле 'layer_id' в теле запроса.")
+		return nil, nil, 0, "", 0, 0, fmt.Errorf("отсутствует поле 'layer_id' в теле запроса")
 	}
 
 	zLevels, err := parseIntSlice(zLevelsRaw, "z_levels")
@@ -62,7 +62,7 @@ func ReadGeoJSONRequest(body map[string]any) (any, []int, int, string, int, int,
 
 	taskUUID, ok := taskUUIDRaw.(string)
 	if !ok || taskUUID == "" {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("uuid должен быть строкой (str).")
+		return nil, nil, 0, "", 0, 0, fmt.Errorf("uuid должен быть строкой (str)")
 	}
 
 	areaID, err := parseInt(areaIDRaw, "area_id")
@@ -77,20 +77,20 @@ func ReadGeoJSONRequest(body map[string]any) (any, []int, int, string, int, int,
 
 	geoJSONMap, ok := geoJSONRaw.(map[string]any)
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("geojson должен быть объектом.")
+		return nil, nil, 0, "", 0, 0, fmt.Errorf("geojson должен быть объектом")
 	}
 
 	if geoJSONMap["type"] != "FeatureCollection" {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("Ожидается GeoJSON типа 'FeatureCollection' в поле 'geojson'.")
+		return nil, nil, 0, "", 0, 0, fmt.Errorf("ожидается GeoJSON типа 'FeatureCollection' в поле 'geojson'")
 	}
 
 	rawFeatures, ok := geoJSONMap["features"].([]any)
 	if !ok {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("Поле 'features' должно быть списком.")
+		return nil, nil, 0, "", 0, 0, fmt.Errorf("поле 'features' должно быть списком")
 	}
 
 	if len(rawFeatures) == 0 {
-		return nil, nil, 0, "", 0, 0, fmt.Errorf("FeatureCollection должен содержать хотя бы один элемент.")
+		return nil, nil, 0, "", 0, 0, fmt.Errorf("FeatureCollection должен содержать хотя бы один элемент")
 	}
 
 	geometries := make([]geom.Geometry, 0, len(rawFeatures))
@@ -98,7 +98,7 @@ func ReadGeoJSONRequest(body map[string]any) (any, []int, int, string, int, int,
 	for index, rawFeature := range rawFeatures {
 		feature, ok := rawFeature.(map[string]any)
 		if !ok {
-			return nil, nil, 0, "", 0, 0, fmt.Errorf("feature с индексом %d должен быть объектом.", index)
+			return nil, nil, 0, "", 0, 0, fmt.Errorf("feature с индексом %d должен быть объектом", index)
 		}
 
 		rawGeometry, ok := feature["geometry"]
@@ -276,13 +276,13 @@ func parseInt(value any, fieldName string) (int, error) {
 
 	case float64:
 		if math.Trunc(typedValue) != typedValue {
-			return 0, fmt.Errorf("%s должен быть целым числом (int).", fieldName)
+			return 0, fmt.Errorf("%s должен быть целым числом (int)", fieldName)
 		}
 
 		return int(typedValue), nil
 
 	default:
-		return 0, fmt.Errorf("%s должен быть целым числом (int).", fieldName)
+		return 0, fmt.Errorf("%s должен быть целым числом (int)", fieldName)
 	}
 }
 

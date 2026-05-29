@@ -6,35 +6,27 @@ import (
 	"fmt"
 	"geo-worker-go/internal/config"
 	"geo-worker-go/internal/natsclient"
-	"log"
-	"sync"
+	"log/slog"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/nats-io/nats.go"
 )
 
 func StartWorker(ctx context.Context, cfg config.Config, resources *natsclient.NATSResources) error {
-	semaphore := make(chan struct{}, cfg.Concurrency)
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(cfg.Concurrency)
 
-	var wg sync.WaitGroup
-
-	advisoryErrCh := make(chan error, 1)
-
-	go func() {
-		advisoryErrCh <- startAdvisoryLoop(ctx, cfg, resources)
-	}()
+	group.Go(func() error {
+		return startAdvisoryLoop(groupCtx, cfg, resources)
+	})
 
 	for {
 		select {
-		case <-ctx.Done():
-			log.Println("worker shutdown requested")
-			wg.Wait()
-			return nil
-
-		case err := <-advisoryErrCh:
-			if err != nil {
-				return fmt.Errorf("advisory loop failed: %w", err)
-			}
+		case <-groupCtx.Done():
+			slog.Info("worker shutdown requested")
+			return group.Wait()
 
 		default:
 		}
@@ -53,29 +45,25 @@ func StartWorker(ctx context.Context, cfg config.Config, resources *natsclient.N
 		}
 
 		for _, msg := range messages {
-			semaphore <- struct{}{}
-			wg.Add(1)
+			message := msg
 
-			go func(message *nats.Msg) {
-				defer wg.Done()
-				defer func() {
-					<-semaphore
-				}()
-
-				if err := HandleRequestMessage(ctx, cfg, resources, message); err != nil {
-					log.Printf("handle request message failed: %v", err)
+			group.Go(func() error {
+				if err := HandleRequestMessage(groupCtx, cfg, resources, message); err != nil {
+					slog.Error("handle request message failed", "error", err)
 
 					if nakErr := message.Nak(); nakErr != nil {
-						log.Printf("nak message failed: %v", nakErr)
+						slog.Error("nak message failed", "error", nakErr)
 					}
 
-					return
+					return nil
 				}
 
 				if ackErr := message.Ack(); ackErr != nil {
-					log.Printf("ack message failed: %v", ackErr)
+					slog.Error("ack message failed", "error", ackErr)
 				}
-			}(msg)
+
+				return nil
+			})
 		}
 	}
 }

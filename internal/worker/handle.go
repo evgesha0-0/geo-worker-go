@@ -7,7 +7,7 @@ import (
 	"geo-worker-go/internal/config"
 	"geo-worker-go/internal/geometry"
 	"geo-worker-go/internal/natsclient"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -19,7 +19,11 @@ func HandleRequestMessage(
 	resources *natsclient.NATSResources,
 	msg *nats.Msg,
 ) error {
-	log.Printf("received request message: subject=%s size=%d bytes", msg.Subject, len(msg.Data))
+	slog.Info(
+		"received request message",
+		"subject", msg.Subject,
+		"size_bytes", len(msg.Data),
+	)
 
 	watchdogCtx, stopWatchdog := context.WithCancel(ctx)
 	defer stopWatchdog()
@@ -97,7 +101,11 @@ func HandleRequestMessage(
 		return fmt.Errorf("publish task geometry: %w", err)
 	}
 
-	log.Printf("request message processed successfully: taskUUID=%s patches=%d", taskUUID, len(patches))
+	slog.Info(
+		"request message processed successfully",
+		"task_uuid", taskUUID,
+		"patches", len(patches),
+	)
 
 	return nil
 }

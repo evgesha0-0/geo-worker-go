@@ -7,7 +7,7 @@ import (
 	"geo-worker-go/internal/models"
 	"geo-worker-go/internal/natsclient"
 
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -72,13 +72,13 @@ func ProcessPatch(
 		return fmt.Errorf("publish patch %s: %w", job.Name, err)
 	}
 
-	log.Printf("Published patch %s", job.Name)
+	slog.Info("Published patch", "patch_name", job.Name)
 
 	if err := natsclient.PublishProgress(resources.JS, cfg, progressMsg); err != nil {
 		return fmt.Errorf("publish progress for patch %s: %w", job.Name, err)
 	}
 
-	log.Printf("Published progress for patch %s", job.Name)
+	slog.Info("Published progress for patch", "patch_name", job.Name)
 
 	return nil
 }

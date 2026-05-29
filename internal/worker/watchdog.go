@@ -2,7 +2,7 @@ package worker
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -19,16 +19,16 @@ func ackProgressWatchdog(
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("ack watchdog stopped")
+			slog.Info("ack watchdog stopped")
 			return
 
 		case <-ticker.C:
 			if err := msg.InProgress(); err != nil {
-				log.Printf("send in_progress ack failed: %v", err)
+				slog.Warn("send in_progress ack failed", "error", err)
 				return
 			}
 
-			log.Println("sent in_progress ack")
+			slog.Info("sent in_progress ack")
 		}
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"geo-worker-go/internal/models"
 	"geo-worker-go/internal/natsclient"
 
-	"log"
+	"log/slog"
 	"strconv"
 
 	"github.com/nats-io/nats.go"
@@ -19,13 +19,13 @@ func startAdvisoryLoop(
 	cfg config.Config,
 	resources *natsclient.NATSResources,
 ) error {
-	log.Println("advisory loop started")
+	slog.Info("advisory loop started")
 
 	for {
 		rawMsg, err := resources.AdvisorySub.NextMsgWithContext(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
-				log.Println("advisory loop stopped")
+				slog.Info("advisory loop stopped")
 				return nil
 			}
 
@@ -34,7 +34,7 @@ func startAdvisoryLoop(
 
 		go func(msg *nats.Msg) {
 			if err := handleAdvisoryMessage(cfg, resources, msg); err != nil {
-				log.Printf("handle advisory message failed: %v", err)
+				slog.Error("handle advisory message failed", "error", err)
 			}
 		}(rawMsg)
 	}
@@ -77,7 +77,12 @@ func handleAdvisoryMessage(
 	if stream != "" && ok {
 		rawOriginal, err := resources.JS.GetMsg(stream, streamSeq)
 		if err != nil {
-			log.Printf("failed to fetch original message for DLQ advisory: stream=%s seq=%d err=%v", stream, streamSeq, err)
+			slog.Error(
+				"failed to fetch original message for DLQ advisory",
+				"stream", stream,
+				"seq", streamSeq,
+				"error", err,
+			)
 		} else if rawOriginal != nil {
 			dlqRecord.Original = string(rawOriginal.Data)
 		}
@@ -87,7 +92,11 @@ func handleAdvisoryMessage(
 		return fmt.Errorf("publish dlq record: %w", err)
 	}
 
-	log.Printf("Published DLQ record for stream=%s seq=%d", stream, streamSeq)
+	slog.Info(
+		"published DLQ record",
+		"stream", stream,
+		"seq", streamSeq,
+	)
 
 	return nil
 }

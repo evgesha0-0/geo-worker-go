@@ -7,6 +7,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/nats-io/nats.go v1.52.0
 	github.com/peterstace/simplefeatures v0.59.0
+	golang.org/x/sync v0.20.0
 )
 
 require (

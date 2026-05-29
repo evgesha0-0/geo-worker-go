@@ -6,7 +6,7 @@ import (
 
 	"geo-worker-go/internal/models"
 	"geo-worker-go/internal/natsclient"
-	"log"
+	"log/slog"
 	"sync"
 )
 
@@ -39,7 +39,12 @@ func ComputeTilesByZoom(
 
 			tiles, err := GetBelongingTiles(geometryData, zoom)
 			if err != nil {
-				log.Printf("getBelongingTiles failed for zoom=%d in patch=%s: %v", zoom, patchName, err)
+				slog.Error(
+					"get belonging tiles failed",
+					"zoom", zoom,
+					"patch_name", patchName,
+					"error", err,
+				)
 
 				mutex.Lock()
 				tilesByZoom[fmt.Sprintf("%d", zoom)] = []models.Tile{}
@@ -104,11 +109,11 @@ func PublishTaskGeometry(
 		return fmt.Errorf("put task geometry to object store key=%s: %w", taskUUID, err)
 	}
 
-	log.Printf(
-		"Published task geometry to object store key=%s features=%d size=%d",
-		taskUUID,
-		len(featureCollection.Features),
-		len(payload),
+	slog.Info(
+		"published task geometry to object store",
+		"task_uuid", taskUUID,
+		"features", len(featureCollection.Features),
+		"size_bytes", len(payload),
 	)
 
 	return nil
